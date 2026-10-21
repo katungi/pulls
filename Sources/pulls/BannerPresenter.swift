@@ -74,7 +74,11 @@ enum DummyNotifications {
     }
 }
 
-/// In-app banners. System notifications can't draw these two treatments, and they would ask for permission.
+/// Development preview banners drawn inside Pulls.
+///
+/// macOS system notifications cannot draw these two treatments. Permission for a future
+/// UNUserNotificationCenter delivery path lives in SystemNotifications and is requested
+/// only after an explicit user action. This type does not post system notifications.
 @MainActor
 final class BannerPresenter {
     var onPrepare: (() -> Void)?

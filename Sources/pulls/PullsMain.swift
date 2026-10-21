@@ -8,6 +8,8 @@ enum PullsLog {
     static let app = Logger(subsystem: subsystem, category: "app")
     static let inbox = Logger(subsystem: subsystem, category: "inbox")
     static let notifications = Logger(subsystem: subsystem, category: "notifications")
+    static let auth = Logger(subsystem: subsystem, category: "auth")
+    static let github = Logger(subsystem: subsystem, category: "github")
 }
 
 enum AppInfo {
@@ -28,12 +30,34 @@ enum AppInfo {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBar: StatusBarController?
+    private var session: SessionController?
+    private var onboarding: OnboardingCoordinator?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        installQuitMenu()
-        let controller = StatusBarController()
+        installMenus()
+        let session = SessionController.makeLive()
+        let onboarding = OnboardingCoordinator(session: session)
+        self.session = session
+        self.onboarding = onboarding
+        let controller = StatusBarController(session: session)
+        controller.onFinishSetup = { onboarding.presentSetup() }
+        controller.onManageRepositories = { onboarding.presentRepositories() }
+        controller.onUsePersonalAccessToken = { onboarding.presentPersonalAccessToken() }
+        controller.onSignOut = {
+            session.signOut()
+            onboarding.presentSetup()
+        }
+        controller.onEnableSystemNotifications = {
+            Task { await session.enableSystemNotifications() }
+        }
         statusBar = controller
         PullsLog.app.info("Pulls launched")
+        Task {
+            await session.restore()
+            if session.needsOnboarding {
+                onboarding.presentSetup()
+            }
+        }
         if CommandLine.arguments.contains("--show") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 controller.presentInbox()
@@ -45,8 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PullsLog.app.info("Pulls terminating")
     }
 
-    /// LSUIElement hides the app menu, so Command-Q has to be installed explicitly.
-    private func installQuitMenu() {
+    /// LSUIElement hides the menu bar. Command-Q and Command-V still need real menu items,
+    /// because AppKit delivers those shortcuts through the main menu.
+    private func installMenus() {
         let quit = NSMenuItem(
             title: "Quit Pulls",
             action: #selector(NSApplication.terminate(_:)),
@@ -57,13 +82,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appMenu = NSMenu()
         appMenu.addItem(quit)
-
         let appItem = NSMenuItem()
         appItem.submenu = appMenu
 
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(editItem("Undo", action: Selector(("undo:")), key: "z"))
+        editMenu.addItem(editItem("Redo", action: Selector(("redo:")), key: "Z"))
+        editMenu.addItem(.separator())
+        editMenu.addItem(editItem("Cut", action: #selector(NSText.cut(_:)), key: "x"))
+        editMenu.addItem(editItem("Copy", action: #selector(NSText.copy(_:)), key: "c"))
+        editMenu.addItem(editItem("Paste", action: #selector(NSText.paste(_:)), key: "v"))
+        editMenu.addItem(editItem("Select All", action: #selector(NSText.selectAll(_:)), key: "a"))
+        let editMenuItem = NSMenuItem()
+        editMenuItem.submenu = editMenu
+
         let mainMenu = NSMenu()
         mainMenu.addItem(appItem)
+        mainMenu.addItem(editMenuItem)
         NSApp.mainMenu = mainMenu
+    }
+
+    /// A nil target sends the action to whichever text field is focused.
+    private func editItem(_ title: String, action: Selector, key: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.target = nil
+        return item
     }
 }
 

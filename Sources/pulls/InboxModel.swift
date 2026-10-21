@@ -239,6 +239,11 @@ enum MockInbox {
     ]
 }
 
+enum SampleDataNotice {
+    static let title = "Sample data"
+    static let detail = "These pull requests are built in. GitHub sync comes later."
+}
+
 enum InboxDestination {
     /// Phase 2 replaces this with the signed-in review inbox. Constant https URL, no user input.
     static let placeholder = URL(string: "https://github.com")!
@@ -253,6 +258,9 @@ final class InboxModel {
     private(set) var isRefreshing = false
     /// Height of the scrolling PR list, capped by the view. Drives the popover size.
     private(set) var measuredListHeight: CGFloat = 240
+
+    /// Phase 2 still renders the built-in sample list. Real pull-request sync comes later.
+    var usesSampleData: Bool { true }
 
     init(pullRequests: [PullRequest] = MockInbox.pullRequests) {
         self.pullRequests = pullRequests

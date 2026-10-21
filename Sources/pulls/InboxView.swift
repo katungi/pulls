@@ -15,8 +15,14 @@ enum InboxMetrics {
 
 struct InboxView: View {
     var model: InboxModel
+    var session: SessionController
     var onPreviewNotifications: () -> Void
     var onPreviewNotification: (NotificationEmphasis) -> Void
+    var onFinishSetup: () -> Void
+    var onManageRepositories: () -> Void
+    var onUsePersonalAccessToken: () -> Void
+    var onSignOut: () -> Void
+    var onEnableSystemNotifications: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -94,6 +100,15 @@ struct InboxView: View {
             }
             .accessibilityHint("Shows sample important and subtle notifications")
 
+            if session.needsOnboarding {
+                MenuRow(action: onFinishSetup) { hovered in
+                    Text("Finish setup")
+                        .font(.system(size: InboxMetrics.menuFontSize))
+                        .foregroundStyle(menuForeground(hovered: hovered))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
             MenuRow(action: model.showPreferences) { hovered in
                 HStack(spacing: 8) {
                     Text("Preferences")
@@ -104,6 +119,23 @@ struct InboxView: View {
                         .foregroundStyle(menuForeground(hovered: hovered, secondary: true))
                 }
                 .foregroundStyle(menuForeground(hovered: hovered))
+            }
+
+            if session.phase != .signedOut {
+                MenuRow(action: onSignOut) { hovered in
+                    HStack(spacing: 8) {
+                        Text("Sign out")
+                            .font(.system(size: InboxMetrics.menuFontSize))
+                        Spacer(minLength: 8)
+                        if let login = session.user?.login {
+                            Text(login)
+                                .font(.system(size: InboxMetrics.menuFontSize))
+                                .foregroundStyle(menuForeground(hovered: hovered, secondary: true))
+                        }
+                    }
+                    .foregroundStyle(menuForeground(hovered: hovered))
+                }
+                .accessibilityLabel(signOutLabel)
             }
 
             MenuRow(action: { NSApp.terminate(nil) }) { hovered in
@@ -118,6 +150,20 @@ struct InboxView: View {
                 .foregroundStyle(menuForeground(hovered: hovered))
             }
             separator
+
+            if model.usesSampleData {
+                Text(SampleDataNotice.title)
+                    .font(.system(size: InboxMetrics.sectionFontSize))
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .padding(.horizontal, InboxMetrics.textInset)
+                    .padding(.top, 2)
+                Text(SampleDataNotice.detail)
+                    .font(.system(size: InboxMetrics.detailFontSize))
+                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                    .padding(.horizontal, InboxMetrics.textInset)
+                    .padding(.bottom, 2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Text(AppInfo.versionLabel)
                 .font(.system(size: InboxMetrics.sectionFontSize))
@@ -180,6 +226,43 @@ struct InboxView: View {
 
             separator
 
+            if let login = session.user?.login {
+                Text("Account")
+                    .font(.system(size: InboxMetrics.sectionFontSize))
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .padding(.horizontal, InboxMetrics.textInset)
+                    .padding(.top, 4)
+                    .padding(.bottom, 2)
+
+                Text(login)
+                    .font(.system(size: InboxMetrics.menuFontSize))
+                    .foregroundStyle(Color(nsColor: .labelColor))
+                    .padding(.horizontal, InboxMetrics.textInset)
+                    .padding(.bottom, 4)
+                    .accessibilityLabel("Signed in as \(login)")
+
+                MenuRow(action: onManageRepositories) { hovered in
+                    Text("Repositories…")
+                        .font(.system(size: InboxMetrics.menuFontSize))
+                        .foregroundStyle(menuForeground(hovered: hovered))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                MenuRow(action: onUsePersonalAccessToken) { hovered in
+                    Text("Personal access token…")
+                        .font(.system(size: InboxMetrics.menuFontSize))
+                        .foregroundStyle(menuForeground(hovered: hovered))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                MenuRow(action: onSignOut) { hovered in
+                    Text("Sign out")
+                        .font(.system(size: InboxMetrics.menuFontSize))
+                        .foregroundStyle(menuForeground(hovered: hovered))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
             Text("Notifications")
                 .font(.system(size: InboxMetrics.sectionFontSize))
                 .foregroundStyle(Color(nsColor: .secondaryLabelColor))
@@ -208,6 +291,16 @@ struct InboxView: View {
                 .padding(.top, 4)
                 .padding(.bottom, 6)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if session.account?.didFinishNotificationStep == true,
+               session.account?.wantsSystemNotifications == false {
+                MenuRow(action: onEnableSystemNotifications) { hovered in
+                    Text("Enable system notifications")
+                        .font(.system(size: InboxMetrics.menuFontSize))
+                        .foregroundStyle(menuForeground(hovered: hovered))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
         }
     }
 
@@ -217,6 +310,13 @@ struct InboxView: View {
             .frame(height: 1)
             .padding(.vertical, 3)
             .accessibilityHidden(true)
+    }
+
+    private var signOutLabel: String {
+        if let login = session.user?.login {
+            return "Sign out \(login)"
+        }
+        return "Sign out"
     }
 
     private func openInbox() {

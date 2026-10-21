@@ -10,19 +10,33 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private let model: InboxModel
+    private let session: SessionController
     private let banners: BannerPresenter
     private let hostingController: NSHostingController<InboxView>
+    private let actions: InboxActionBox
     private var escapeMonitor: Any?
     private var ignoreNextStatusClick = false
+    var onFinishSetup: () -> Void = {}
+    var onManageRepositories: () -> Void = {}
+    var onUsePersonalAccessToken: () -> Void = {}
+    var onSignOut: () -> Void = {}
+    var onEnableSystemNotifications: () -> Void = {}
 
-    override init() {
+    init(session: SessionController) {
         let model = InboxModel()
         let banners = BannerPresenter()
+        let actions = InboxActionBox()
         let hosting = InboxHostingController(
             rootView: InboxView(
                 model: model,
+                session: session,
                 onPreviewNotifications: { banners.previewAll() },
-                onPreviewNotification: { banners.preview($0) }
+                onPreviewNotification: { banners.preview($0) },
+                onFinishSetup: { actions.finishSetup() },
+                onManageRepositories: { actions.manageRepositories() },
+                onUsePersonalAccessToken: { actions.usePersonalAccessToken() },
+                onSignOut: { actions.signOut() },
+                onEnableSystemNotifications: { actions.enableSystemNotifications() }
             )
         )
         hosting.sizingOptions = [.intrinsicContentSize, .preferredContentSize]
@@ -32,11 +46,34 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         hosting.view.layer?.backgroundColor = NSColor.clear.cgColor
 
         self.model = model
+        self.session = session
         self.banners = banners
         self.hostingController = hosting
+        self.actions = actions
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.popover = NSPopover()
         super.init()
+
+        actions.finishSetup = { [weak self] in
+            self?.closePopover()
+            self?.onFinishSetup()
+        }
+        actions.manageRepositories = { [weak self] in
+            self?.closePopover()
+            self?.onManageRepositories()
+        }
+        actions.usePersonalAccessToken = { [weak self] in
+            self?.closePopover()
+            self?.onUsePersonalAccessToken()
+        }
+        actions.signOut = { [weak self] in
+            self?.closePopover()
+            self?.onSignOut()
+        }
+        actions.enableSystemNotifications = { [weak self] in
+            self?.closePopover()
+            self?.onEnableSystemNotifications()
+        }
 
         popover.behavior = .transient
         popover.animates = true
@@ -89,6 +126,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             _ = self.model.page
             _ = self.model.enabledSections
             _ = self.model.measuredListHeight
+            _ = self.session.needsOnboarding
+            _ = self.session.phase
+            _ = self.session.user?.login
+            _ = self.session.account?.wantsSystemNotifications
+            _ = self.session.account?.didFinishNotificationStep
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
@@ -242,4 +284,13 @@ final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
+}
+
+/// Holds menu actions until `StatusBarController` can close the popover and forward them.
+private final class InboxActionBox {
+    var finishSetup: () -> Void = {}
+    var manageRepositories: () -> Void = {}
+    var usePersonalAccessToken: () -> Void = {}
+    var signOut: () -> Void = {}
+    var enableSystemNotifications: () -> Void = {}
 }

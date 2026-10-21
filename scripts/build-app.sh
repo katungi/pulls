@@ -47,6 +47,10 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINARY" "$APP/Contents/MacOS/Pulls"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+if [[ -f "$ROOT/Config/GitHubOAuth.json" ]]; then
+  # The client ID is not a secret, but it stays out of git. The bundle reads this at launch.
+  cp "$ROOT/Config/GitHubOAuth.json" "$APP/Contents/Resources/GitHubOAuth.json"
+fi
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 chmod +x "$APP/Contents/MacOS/Pulls"
 
